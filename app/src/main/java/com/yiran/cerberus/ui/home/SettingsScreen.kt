@@ -173,8 +173,8 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                                 uri = uri,
                                 password = backupPassword.value,
                                 onSuccess = {
-                                    showImportDialog.value = false
-                                    backupPassword.value = ""
+                                    showImportDialog = false
+                                    backupPassword = ""
                                     Toast.makeText(context, "数据恢复成功", Toast.LENGTH_SHORT).show()
                                 },
                                 onError = { msg ->
@@ -299,8 +299,8 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         }
                         context.startActivity(Intent.createChooser(intent, "发送邮件"))
                     }
-                    AboutItem(Icons.Default.Link, "GitHub", "https://github.com/Ranpers") {
-                        val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Ranpers".toUri())
+                    AboutItem(Icons.Default.Link, "GitHub", "https://github.com/Ranpers/Cerberus") {
+                        val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Ranpers/Cerberus".toUri())
                         context.startActivity(intent)
                     }
                 }
