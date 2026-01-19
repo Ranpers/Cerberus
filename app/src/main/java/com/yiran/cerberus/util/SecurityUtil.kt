@@ -13,8 +13,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.yiran.cerberus.model.Account
 import java.security.SecureRandom
-import java.security.spec.KeySpec
-import java.util.Arrays
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
