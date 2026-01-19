@@ -173,8 +173,8 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                                 uri = uri,
                                 password = backupPassword.value,
                                 onSuccess = {
-                                    showImportDialog = false
-                                    backupPassword = ""
+                                    showImportDialog.value = false
+                                    backupPassword.value = ""
                                     Toast.makeText(context, "数据恢复成功", Toast.LENGTH_SHORT).show()
                                 },
                                 onError = { msg ->
