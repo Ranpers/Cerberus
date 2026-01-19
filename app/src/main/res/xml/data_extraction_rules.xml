@@ -1,19 +1,24 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Cerberus 数据提取规则
+   用于控制 Android 12+ 的自动备份和设备迁移行为。
 -->
 <data-extraction-rules>
+    <!-- 云端备份 (Google Drive 备份) -->
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
+        <!--
+          为了遵守“零云端”承诺，且由于 EncryptedSharedPreferences 恢复后因密钥缺失无法解密，
+          我们显式排除存储账号和主密码哈希的配置文件。
+          使用 domain="sharedpref" 指向 shared_prefs 目录。
         -->
+        <exclude domain="sharedpref" path="secure_prefs.xml" />
     </cloud-backup>
-    <!--
+
+    <!-- 设备间传输 (换机助手、有线/无线直接迁移) -->
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <!--
+          在设备直接迁移时，部分系统支持硬件密钥迁移。
+        -->
+        <include domain="sharedpref" path="secure_prefs.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>
