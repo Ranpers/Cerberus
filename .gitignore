@@ -1,0 +1,60 @@
+# --- Gradle ---
+.gradle/
+.kotlin/
+build/
+capture/
+# 避免本地配置被覆盖
+.idea/gradle.xml
+.idea/libraries/
+
+# --- Android Studio / IntelliJ ---
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.navigation/
+.externalNativeBuild/
+.cxx/
+local.properties
+
+# --- OS / IDE Cache ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Built binaries (APK/AAB/Release outputs) ---
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+release/
+**/release/
+# 混淆映射文件
+**/mapping.txt
+**/seeds.txt
+**/usage.txt
+**/configuration.txt
+
+# --- Keystores & Secrets ---
+*.jks
+*.keystore
+*.p12
+google-services.json
+
+# --- User specific stuff ---
+*.swp
+*~
+.idea/shelf/
+.idea/workspace.xml
+.idea/caches/
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/modules.xml
+
+# --- Log files ---
+*.log
+
+# --- Android Profiler ---
+*.hprof
