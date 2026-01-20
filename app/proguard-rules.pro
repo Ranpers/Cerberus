@@ -17,7 +17,9 @@
 # --------------------------------------------------------------------------------
 
 # 1. 保留 UniFFI 生成的具体包名下的类
+# 注意：UniFFI 生成的代码通常在 uniffi.rust_core 目录下，且使用了反射
 -keep class uniffi.rust_core.** { *; }
+-keep class com.sun.jna.** { *; }
 
 # 2. 针对 JNA 的精细化规则
 -keep class com.sun.jna.Native { *; }
@@ -53,6 +55,7 @@
 # 混淆源码文件名和行号
 -renamesourcefileattribute SourceFile
 -keepattributes !SourceFile,!LineNumberTable
+-keepattributes Exceptions,Signature,InnerClasses,AnnotationDefault,EnclosingMethod
 
 # 针对 EncryptedSharedPreferences 的保留规则
 -keep class androidx.security.crypto.** { *; }

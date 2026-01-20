@@ -20,6 +20,12 @@ import uniffi.rust_core.jsonToAccounts as rustJsonToAccounts
 
 object SecurityUtil {
     private const val TAG = "SecurityUtil"
+    
+    // 自动锁定阈值配置
+    private const val KEY_AUTO_LOCK_TIME = "auto_lock_time"
+    private const val DEFAULT_AUTO_LOCK_TIME = 30 * 1000L // 默认 30 秒
+    
+    private var lastBackgroundTime: Long = 0
 
     init {
         loadNativeLibraries()
@@ -29,9 +35,7 @@ object SecurityUtil {
         listOf("jnidispatch", "rust_core").forEach { lib ->
             try {
                 System.loadLibrary(lib)
-            } catch (e: UnsatisfiedLinkError) {
-                // 在 Release 版中，Log.e 虽然会保留，但 R8 会移除 TAG 等字符串常量
-                // 建议保留核心模块加载失败的日志，方便排除故障
+            } catch (_: UnsatisfiedLinkError) {
                 Log.e(TAG, "Security module init failed")
             }
         }
@@ -70,6 +74,24 @@ object SecurityUtil {
         )
     }
 
+    fun markEnterBackground() {
+        lastBackgroundTime = System.currentTimeMillis()
+    }
+
+    fun shouldReauthenticate(context: Context): Boolean {
+        if (lastBackgroundTime == 0L) return true
+        val elapsed = System.currentTimeMillis() - lastBackgroundTime
+        return elapsed > getAutoLockTime(context)
+    }
+
+    fun getAutoLockTime(context: Context): Long {
+        return getEncryptedPrefs(context).getLong(KEY_AUTO_LOCK_TIME, DEFAULT_AUTO_LOCK_TIME)
+    }
+
+    fun setAutoLockTime(context: Context, timeMs: Long) {
+        getEncryptedPrefs(context).edit { putLong(KEY_AUTO_LOCK_TIME, timeMs) }
+    }
+
     fun isTermsAccepted(context: Context): Boolean = getEncryptedPrefs(context).getBoolean(KEY_TERMS_ACCEPTED, false)
     fun setTermsAccepted(context: Context) = getEncryptedPrefs(context).edit { putBoolean(KEY_TERMS_ACCEPTED, true) }
 
@@ -77,7 +99,7 @@ object SecurityUtil {
         try {
             val json = rustAccountsToJson(accounts)
             getEncryptedPrefs(context).edit { putString(KEY_ACCOUNTS, json) }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Log.e(TAG, "Serialization failed")
         }
     }
@@ -86,7 +108,7 @@ object SecurityUtil {
         val json = getEncryptedPrefs(context).getString(KEY_ACCOUNTS, null) ?: return emptyList()
         return try {
             rustJsonToAccounts(json)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Log.e(TAG, "Deserialization failed")
             emptyList()
         }
@@ -98,7 +120,7 @@ object SecurityUtil {
     fun encryptBackup(data: String, password: String): String {
         return try {
             rustEncryptBackup(data, password)
-        } catch (e: CryptoException.InvalidParameter) {
+        } catch (_: CryptoException.InvalidParameter) {
             throw IllegalArgumentException("备份参数非法")
         } catch (e: CryptoException) {
             throw IllegalStateException("备份加密失败", e)
@@ -108,13 +130,13 @@ object SecurityUtil {
     fun decryptBackup(encryptedBase64: String, password: String): String {
         return try {
             rustDecryptBackup(encryptedBase64, password)
-        } catch (e: CryptoException.UnsupportedVersion) {
+        } catch (_: CryptoException.UnsupportedVersion) {
             throw IllegalStateException("备份版本不兼容，请升级应用后再试")
-        } catch (e: CryptoException.InvalidParameter) {
+        } catch (_: CryptoException.InvalidParameter) {
             throw IllegalArgumentException("备份文件格式无效")
-        } catch (e: CryptoException.InvalidData) {
+        } catch (_: CryptoException.InvalidData) {
             throw IllegalArgumentException("备份文件格式无效或已损坏")
-        } catch (e: CryptoException.DecryptionFailed) {
+        } catch (_: CryptoException.DecryptionFailed) {
             throw IllegalArgumentException("密码错误或备份已损坏")
         } catch (e: CryptoException) {
             throw IllegalStateException("解密失败", e)

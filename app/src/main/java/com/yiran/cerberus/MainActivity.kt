@@ -2,7 +2,6 @@ package com.yiran.cerberus
 
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.PredictiveBackHandler
@@ -39,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.yiran.cerberus.ui.home.HomeScreen
 import com.yiran.cerberus.ui.home.SettingsScreen
 import com.yiran.cerberus.ui.theme.CerberusTheme
@@ -88,27 +91,6 @@ class MainActivity : FragmentActivity() {
                     // 动画进度状态
                     var backProgress by remember { mutableFloatStateOf(0f) }
 
-                    // 根据系统版本选择返回处理器
-                    if (isUnlocked && currentScreen == "settings") {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            // Android 14+ 使用 PredictiveBackHandler 增加缩放预览效果
-                            PredictiveBackHandler { progress ->
-                                try {
-                                    progress.collect { backEvent ->
-                                        backProgress = backEvent.progress
-                                    }
-                                    currentScreen = "home"
-                                    backProgress = 0f
-                                } catch (_ : CancellationException) {
-                                    backProgress = 0f
-                                }
-                            }
-                        } else {
-                            // 旧版本使用普通 BackHandler
-                            BackHandler { currentScreen = "home" }
-                        }
-                    }
-
                     val triggerBiometric = {
                         showBiometricPrompt(activity,
                             onSuccess = { 
@@ -123,6 +105,42 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
+                    // 监听应用全局生命周期
+                    DisposableEffect(Unit) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                Lifecycle.Event.ON_START -> {
+                                    // 从后台返回时检查是否需要重新锁定
+                                    if (SecurityUtil.isTermsAccepted(context) && 
+                                        SecurityUtil.isMasterPasswordSet(context) &&
+                                        SecurityUtil.shouldReauthenticate(context)) {
+                                        isUnlocked = false
+                                        isCheckingAuth = true
+                                        if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
+                                            triggerBiometric()
+                                        } else {
+                                            showPasswordInput = true
+                                            isCheckingAuth = false
+                                        }
+                                    } else if (isUnlocked) {
+                                        // 还没到超时时间，保持解锁
+                                        isCheckingAuth = false
+                                    }
+                                }
+                                Lifecycle.Event.ON_STOP -> {
+                                    // 进入后台时记录时间
+                                    SecurityUtil.markEnterBackground()
+                                }
+                                else -> {}
+                            }
+                        }
+                        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+                        onDispose {
+                            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+                        }
+                    }
+
+                    // 初始检查
                     LaunchedEffect(Unit) {
                         if (!SecurityUtil.isTermsAccepted(context)) {
                             showTerms = true
@@ -130,18 +148,40 @@ class MainActivity : FragmentActivity() {
                         } else if (!SecurityUtil.isMasterPasswordSet(context)) {
                             showPasswordInput = true
                             isCheckingAuth = false
-                        } else if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
-                            triggerBiometric()
+                        } else if (!isUnlocked) {
+                            if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
+                                triggerBiometric()
+                            } else {
+                                showPasswordInput = true
+                                isCheckingAuth = false
+                            }
                         } else {
-                            showPasswordInput = true
                             isCheckingAuth = false
+                        }
+                    }
+
+                    // 处理返回键：只有在已解锁且在设置页面时才拦截
+                    if (isUnlocked && currentScreen == "settings") {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            PredictiveBackHandler { progress ->
+                                try {
+                                    progress.collect { backEvent ->
+                                        backProgress = backEvent.progress
+                                    }
+                                    currentScreen = "home"
+                                    backProgress = 0f
+                                } catch (_ : CancellationException) {
+                                    backProgress = 0f
+                                }
+                            }
+                        } else {
+                            BackHandler { currentScreen = "home" }
                         }
                     }
 
                     Box(modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            // 应用简单的缩放动画效果（针对预测性返回）
                             if (backProgress > 0f) {
                                 val scale = 1f - (backProgress * 0.05f)
                                 scaleX = scale
@@ -213,11 +253,12 @@ class MainActivity : FragmentActivity() {
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
+                    // 用户取消验证（如点击取消按钮或手势返回）
                     if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || 
                         errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
                         onCancel()
                     } else {
-                        Toast.makeText(activity, "验证提示: $errString", Toast.LENGTH_SHORT).show()
+                        // 其他错误（如尝试次数过多）也退回到密码输入
                         onCancel()
                     }
                 }
@@ -227,6 +268,7 @@ class MainActivity : FragmentActivity() {
             .setTitle("Cerberus 安全身份验证")
             .setSubtitle("使用生物识别快速解锁")
             .setNegativeButtonText("使用密码")
+            .setAllowedAuthenticators(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .build()
 
         biometricPrompt.authenticate(promptInfo)
