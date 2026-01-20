@@ -34,7 +34,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 必须开启混淆，ProGuard 规则才会生效
+            isMinifyEnabled = true
+            // 必须开启资源压缩以减小体积
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

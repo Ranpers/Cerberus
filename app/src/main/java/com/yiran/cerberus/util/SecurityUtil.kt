@@ -29,9 +29,10 @@ object SecurityUtil {
         listOf("jnidispatch", "rust_core").forEach { lib ->
             try {
                 System.loadLibrary(lib)
-                Log.d(TAG, "Native library '$lib' loaded")
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Could not load native library '$lib'", e)
+                // 在 Release 版中，Log.e 虽然会保留，但 R8 会移除 TAG 等字符串常量
+                // 建议保留核心模块加载失败的日志，方便排除故障
+                Log.e(TAG, "Security module init failed")
             }
         }
     }
@@ -47,8 +48,9 @@ object SecurityUtil {
     private var sharedPreferencesInstance: SharedPreferences? = null
 
     private fun getEncryptedPrefs(context: Context): SharedPreferences {
+        val appContext = context.applicationContext
         return sharedPreferencesInstance ?: synchronized(this) {
-            sharedPreferencesInstance ?: createEncryptedPrefs(context).also {
+            sharedPreferencesInstance ?: createEncryptedPrefs(appContext).also {
                 sharedPreferencesInstance = it
             }
         }
@@ -76,7 +78,7 @@ object SecurityUtil {
             val json = rustAccountsToJson(accounts)
             getEncryptedPrefs(context).edit { putString(KEY_ACCOUNTS, json) }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to serialize accounts", e)
+            Log.e(TAG, "Serialization failed")
         }
     }
 
@@ -85,16 +87,13 @@ object SecurityUtil {
         return try {
             rustJsonToAccounts(json)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to deserialize accounts", e)
+            Log.e(TAG, "Deserialization failed")
             emptyList()
         }
     }
 
-    // --- 导出序列化工具供 ViewModel 使用 ---
     fun accountsToJson(accounts: List<Account>): String = rustAccountsToJson(accounts)
     fun jsonToAccounts(json: String): List<Account> = rustJsonToAccounts(json)
-
-    // --- 加密逻辑 ---
 
     fun encryptBackup(data: String, password: String): String {
         return try {
@@ -121,8 +120,6 @@ object SecurityUtil {
             throw IllegalStateException("解密失败", e)
         }
     }
-
-    // --- 主密码逻辑 ---
 
     fun isMasterPasswordSet(context: Context): Boolean = getEncryptedPrefs(context).contains(KEY_MASTER_PASSWORD_HASH)
 
