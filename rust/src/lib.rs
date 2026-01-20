@@ -17,7 +17,8 @@ use serde::{Serialize, Deserialize};
 // 初始化 UniFFI
 uniffi::setup_scaffolding!();
 
-const ITERATION_COUNT: u32 = 100_000;
+// 建议增加到 600,000 次以符合现代安全标准 (OWASP)
+const ITERATION_COUNT: u32 = 600_000;
 const KEY_LENGTH: usize = 32;
 const IV_LENGTH: usize = 12;
 const BACKUP_SALT_LENGTH: usize = 16;
