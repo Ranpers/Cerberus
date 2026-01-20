@@ -76,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -469,9 +470,9 @@ fun StyledTextField(
         readOnly = readOnly,
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            errorContainerColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            errorContainerColor = Color.Transparent,
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
         )
@@ -522,8 +523,6 @@ fun EditPasswordDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { includeSpecial = !includeSpecial }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -696,8 +695,6 @@ fun AddAccountDialog(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { includeSpecial = !includeSpecial }
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -736,10 +733,15 @@ fun AddAccountDialog(
                             onValueChange = { },
                             readOnly = true,
                             label = "哈希算法",
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded.value) },
-                            modifier = Modifier.clickable { expanded.value = true }
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded.value) }
                         )
-                        Box(modifier = Modifier.matchParentSize().clickable { expanded.value = true })
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .padding(top = 8.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { expanded.value = true }
+                        )
                         DropdownMenu(
                             expanded = expanded.value, 
                             onDismissRequest = { expanded.value = false },
