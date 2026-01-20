@@ -12,6 +12,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Cerberus"
         android:enableOnBackInvokedCallback="true"
+        tools:targetApi="33"
         tools:replace="android:allowBackup">
         <activity
             android:name=".MainActivity"
