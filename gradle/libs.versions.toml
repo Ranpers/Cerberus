@@ -9,12 +9,10 @@ lifecycleViewModelCompose = "2.8.7"
 activityCompose = "1.12.2"
 kotlin = "2.0.21"
 composeBom = "2024.09.00"
-otp = "2.4.1"
-commonsCodec = "1.20.0"
 fragmentKtx = "1.8.9"
 biometric = "1.1.0"
 securityCrypto = "1.1.0"
-gson = "2.10.1"
+jna = "5.16.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,12 +31,10 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
-kotlin-otp = { group = "dev.turingcomplete", name = "kotlin-onetimepassword", version.ref = "otp" }
-commons-codec = { group = "commons-codec", name = "commons-codec", version.ref = "commonsCodec" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragmentKtx" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
-gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

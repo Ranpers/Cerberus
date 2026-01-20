@@ -5,15 +5,13 @@ import android.net.Uri
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.yiran.cerberus.model.Account
 import com.yiran.cerberus.util.SecurityUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uniffi.rust_core.Account
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -22,7 +20,6 @@ class HomeViewModel : ViewModel() {
     val accounts: List<Account> = _accounts
 
     private var saveJob: Job? = null
-    private val gson = Gson()
 
     fun loadAccounts(context: Context) {
         viewModelScope.launch {
@@ -57,7 +54,9 @@ class HomeViewModel : ViewModel() {
     fun updatePassword(context: Context, accountId: Int, newPassword: String) {
         val index = _accounts.indexOfFirst { it.id == accountId }
         if (index != -1) {
-            _accounts[index] = _accounts[index].copy(password = newPassword)
+            val oldAccount = _accounts[index]
+            // UniFFI 生成的 Record 是 data class，可以使用 copy
+            _accounts[index] = oldAccount.copy(password = newPassword)
             scheduleSave(context)
         }
     }
@@ -65,7 +64,8 @@ class HomeViewModel : ViewModel() {
     // --- 备份导出与导入 (支持二次加密) ---
 
     fun exportBackup(password: String): String {
-        val json = gson.toJson(_accounts.toList())
+        // 使用 Rust 实现的序列化
+        val json = SecurityUtil.accountsToJson(_accounts.toList())
         return SecurityUtil.encryptBackup(json, password)
     }
 
@@ -85,8 +85,8 @@ class HomeViewModel : ViewModel() {
                 }
 
                 val json = SecurityUtil.decryptBackup(encryptedContent, password)
-                val type = object : TypeToken<List<Account>>() {}.type
-                val importedAccounts: List<Account> = gson.fromJson(json, type)
+                // 使用 Rust 实现的反序列化，不再需要 TypeToken
+                val importedAccounts = SecurityUtil.jsonToAccounts(json)
 
                 if (importedAccounts.isNotEmpty()) {
                     _accounts.clear()
@@ -98,7 +98,11 @@ class HomeViewModel : ViewModel() {
                 } else {
                     onError("备份文件内容为空")
                 }
-            } catch (_: Exception) {
+            } catch (e: IllegalArgumentException) {
+                onError(e.message ?: "导入失败: 备份文件无效")
+            } catch (e: IllegalStateException) {
+                onError(e.message ?: "导入失败: 备份版本不兼容或未知错误")
+            } catch (e: Exception) {
                 onError("导入失败: 密码错误或文件损坏")
             }
         }

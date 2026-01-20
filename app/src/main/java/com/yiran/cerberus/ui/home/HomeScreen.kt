@@ -76,11 +76,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.yiran.cerberus.model.Account
 import com.yiran.cerberus.util.OtpAlgorithm
 import com.yiran.cerberus.util.PasswordGenerator
 import com.yiran.cerberus.util.TotpUtil
 import kotlinx.coroutines.delay
+import uniffi.rust_core.Account
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -230,7 +230,7 @@ fun AccountItemCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = account.iconInitial.toString(),
+                            text = account.iconInitial,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
@@ -598,10 +598,10 @@ private fun createAccount(name: String, user: String, pass: String, otp: Boolean
         name = name,
         username = user,
         password = pass,
-        iconInitial = name.firstOrNull()?.uppercaseChar() ?: '?',
+        iconInitial = name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
         hasOtp = otp,
         secretKey = if (otp) key else "",
-        algorithm = algo
+        algorithm = algo.toRustAlgo()
     )
 }
 

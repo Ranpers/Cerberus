@@ -1,7 +1,8 @@
 # --- Gradle ---
-.gradle/
+# Gradle
+**/.gradle/
 .kotlin/
-build/
+**/build/
 capture/
 # 避免本地配置被覆盖
 .idea/gradle.xml
@@ -17,6 +18,16 @@ out/
 .externalNativeBuild/
 .cxx/
 local.properties
+
+# Generated JNI libraries from Rust/Cargo
+**/src/main/jniLibs/
+
+# Rust build artifacts
+**/target/
+rust/target/
+
+# Ignore UniFFI-generated Kotlin bindings
+/app/src/main/java/uniffi/
 
 # --- OS / IDE Cache ---
 .DS_Store

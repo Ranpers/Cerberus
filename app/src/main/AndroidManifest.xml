@@ -11,6 +11,7 @@
         android:roundIcon="@mipmap/cerberus_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Cerberus"
+        android:enableOnBackInvokedCallback="true"
         tools:replace="android:allowBackup">
         <activity
             android:name=".MainActivity"

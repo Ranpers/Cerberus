@@ -1,9 +1,11 @@
 package com.yiran.cerberus
 
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.biometric.BiometricPrompt
@@ -39,6 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,6 +63,7 @@ import com.yiran.cerberus.ui.home.HomeScreen
 import com.yiran.cerberus.ui.home.SettingsScreen
 import com.yiran.cerberus.ui.theme.CerberusTheme
 import com.yiran.cerberus.util.SecurityUtil
+import kotlinx.coroutines.CancellationException
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,8 +85,28 @@ class MainActivity : FragmentActivity() {
                     var currentScreen by rememberSaveable { mutableStateOf("home") }
                     var isCheckingAuth by remember { mutableStateOf(true) }
 
+                    // 动画进度状态
+                    var backProgress by remember { mutableFloatStateOf(0f) }
+
+                    // 根据系统版本选择返回处理器
                     if (isUnlocked && currentScreen == "settings") {
-                        BackHandler { currentScreen = "home" }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            // Android 14+ 使用 PredictiveBackHandler 增加缩放预览效果
+                            PredictiveBackHandler { progress ->
+                                try {
+                                    progress.collect { backEvent ->
+                                        backProgress = backEvent.progress
+                                    }
+                                    currentScreen = "home"
+                                    backProgress = 0f
+                                } catch (_ : CancellationException) {
+                                    backProgress = 0f
+                                }
+                            }
+                        } else {
+                            // 旧版本使用普通 BackHandler
+                            BackHandler { currentScreen = "home" }
+                        }
                     }
 
                     val triggerBiometric = {
@@ -113,7 +138,18 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            // 应用简单的缩放动画效果（针对预测性返回）
+                            if (backProgress > 0f) {
+                                val scale = 1f - (backProgress * 0.05f)
+                                scaleX = scale
+                                scaleY = scale
+                                alpha = 1f - (backProgress * 0.2f)
+                            }
+                        }
+                    ) {
                         when {
                             isUnlocked -> {
                                 if (currentScreen == "home") {

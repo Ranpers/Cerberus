@@ -1,2 +1,4 @@
 /build
 /release
+/src/main/jniLibs/
+/src/main/java/uniffi/
