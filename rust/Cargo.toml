@@ -1,0 +1,32 @@
+[package]
+name = "rust_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+name = "rust_core"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/uniffi-bindgen.rs"
+
+[dependencies]
+uniffi = { version = "0.28.0", features = ["cli"] }
+aes-gcm = "0.10.3"
+pbkdf2 = "0.12.2"
+sha1 = "0.10.6"
+sha2 = "0.10.8"
+hmac = "0.12.1"
+digest = "0.10.7"
+rand = "0.8.5"
+base64 = "0.22.1"
+thiserror = "1.0"
+hex = "0.4.3"
+data-encoding = "2.6.0"
+url = "2.5.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+uniffi = { version = "0.28.0", features = ["build"] }
