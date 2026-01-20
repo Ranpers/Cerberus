@@ -55,16 +55,21 @@ class HomeViewModel : ViewModel() {
         val index = _accounts.indexOfFirst { it.id == accountId }
         if (index != -1) {
             val oldAccount = _accounts[index]
-            // UniFFI 生成的 Record 是 data class，可以使用 copy
             _accounts[index] = oldAccount.copy(password = newPassword)
             scheduleSave(context)
         }
     }
 
-    // --- 备份导出与导入 (支持二次加密) ---
+    // --- 排序逻辑 ---
+    fun moveAccount(context: Context, fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex || fromIndex !in _accounts.indices || toIndex !in _accounts.indices) return
+        _accounts.add(toIndex, _accounts.removeAt(fromIndex))
+        scheduleSave(context)
+    }
+
+    // --- 备份导出与导入 ---
 
     fun exportBackup(password: String): String {
-        // 使用 Rust 实现的序列化
         val json = SecurityUtil.accountsToJson(_accounts.toList())
         return SecurityUtil.encryptBackup(json, password)
     }
@@ -85,7 +90,6 @@ class HomeViewModel : ViewModel() {
                 }
 
                 val json = SecurityUtil.decryptBackup(encryptedContent, password)
-                // 使用 Rust 实现的反序列化，不再需要 TypeToken
                 val importedAccounts = SecurityUtil.jsonToAccounts(json)
 
                 if (importedAccounts.isNotEmpty()) {
@@ -102,7 +106,7 @@ class HomeViewModel : ViewModel() {
                 onError(e.message ?: "导入失败: 备份文件无效")
             } catch (e: IllegalStateException) {
                 onError(e.message ?: "导入失败: 备份版本不兼容或未知错误")
-            } catch (e: Exception) {
+            } catch (_ : Exception) {
                 onError("导入失败: 密码错误或文件损坏")
             }
         }
