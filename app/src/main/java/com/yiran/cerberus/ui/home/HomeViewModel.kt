@@ -116,7 +116,7 @@ class HomeViewModel : ViewModel() {
 
     fun checkUpdate(
         currentVersion: String,
-        onResult: (hasUpdate: Boolean, latestVersion: String) -> Unit,
+        onResult: (hasUpdate: Boolean, latestVersion: String, downloadUrl: String?) -> Unit,
         onError: (String) -> Unit
     ) {
         viewModelScope.launch {
@@ -134,12 +134,26 @@ class HomeViewModel : ViewModel() {
                         val json = JSONObject(response)
                         val latestTag = json.getString("tag_name").removePrefix("v")
                         val hasUpdate = isVersionNewer(currentVersion, latestTag)
-                        Pair(hasUpdate, latestTag)
+                        
+                        var downloadUrl: String? = null
+                        val assets = json.optJSONArray("assets")
+                        if (assets != null) {
+                            for (i in 0 until assets.length()) {
+                                val asset = assets.getJSONObject(i)
+                                val name = asset.getString("name")
+                                if (name.endsWith(".apk")) {
+                                    downloadUrl = asset.getString("browser_download_url")
+                                    break
+                                }
+                            }
+                        }
+                        
+                        Triple(hasUpdate, latestTag, downloadUrl)
                     } else {
                         throw Exception("服务器响应异常: ${connection.responseCode}")
                     }
                 }
-                onResult(result.first, result.second)
+                onResult(result.first, result.second, result.third)
             } catch (_ : UnknownHostException) {
                 onError("网络不可用，请检查联网设置")
             } catch (_ : SocketTimeoutException) {

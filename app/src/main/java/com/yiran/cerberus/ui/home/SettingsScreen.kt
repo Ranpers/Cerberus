@@ -413,12 +413,14 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                                 isCheckingUpdate.value = true
                                 homeViewModel.checkUpdate(
                                     currentVersion = versionName,
-                                    onResult = { hasUpdate, latest ->
+                                    onResult = { hasUpdate, latest, downloadUrl ->
                                         isCheckingUpdate.value = false
                                         if (hasUpdate) {
-                                            val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Ranpers/Cerberus/releases/latest".toUri())
+                                            val targetUrl = downloadUrl ?: "https://github.com/Ranpers/Cerberus/releases/latest"
+                                            val intent = Intent(Intent.ACTION_VIEW, targetUrl.toUri())
                                             context.startActivity(intent)
-                                            Toast.makeText(context, "发现新版本: v$latest，正在跳转 GitHub...", Toast.LENGTH_LONG).show()
+                                            val msg = if (downloadUrl != null) "发现新版本: v$latest，正在下载..." else "发现新版本: v$latest，正在跳转 GitHub..."
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                         } else {
                                             Toast.makeText(context, "当前已是最新版本", Toast.LENGTH_SHORT).show()
                                         }
