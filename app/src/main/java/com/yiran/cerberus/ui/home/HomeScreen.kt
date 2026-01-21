@@ -81,6 +81,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -98,6 +100,65 @@ import com.yiran.cerberus.util.TotpUtil
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uniffi.rust_core.Account
+
+@Composable
+fun Modifier.dragToReorder(
+    lazyListState: androidx.compose.foundation.lazy.LazyListState,
+    density: androidx.compose.ui.unit.Density,
+    getDraggedIndex: () -> Int?,
+    getDragOffset: () -> Float,
+    onDragStart: (Int) -> Unit,
+    onDragMove: (deltaY: Float) -> Unit,
+    onSwap: (from: Int, to: Int, adjustment: Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit
+): Modifier {
+    val haptic = LocalHapticFeedback.current
+    return this.pointerInput(Unit) {
+        // use owner's `dragOffset` via `getDragOffset` to avoid local accumulator warnings
+        detectDragGesturesAfterLongPress(
+            onDragStart = { offset ->
+                lazyListState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { item ->
+                        offset.y.toInt() in item.offset..(item.offset + item.size)
+                    }?.also { item ->
+                        // 给调用方通知开始索引
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDragStart(item.index)
+                    }
+            },
+            onDrag = { change, dragAmount ->
+                change.consume()
+                // report movement to owner so it can update visuals
+                onDragMove(dragAmount.y)
+
+                val currentDraggedIndex = getDraggedIndex() ?: return@detectDragGesturesAfterLongPress
+                val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
+                val spacingPx = with(density) { 16.dp.toPx() }
+
+                val currentLocalOffset = getDragOffset()
+
+                val targetItem = if (dragAmount.y < 0) {
+                    visibleItems.find { it.index == currentDraggedIndex - 1 }?.takeIf { item ->
+                        currentLocalOffset < -(item.size + spacingPx) / 2f
+                    }
+                } else {
+                    visibleItems.find { it.index == currentDraggedIndex + 1 }?.takeIf { item ->
+                        currentLocalOffset > (item.size + spacingPx) / 2f
+                    }
+                }
+
+                if (targetItem != null) {
+                    val adjustment = targetItem.size + spacingPx
+                    onSwap(currentDraggedIndex, targetItem.index, adjustment)
+                    // Caller manages visual offset; after swap caller will adjust `dragOffset`.
+                }
+            },
+            onDragEnd = { onDragEnd() },
+            onDragCancel = { onDragCancel() }
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -179,71 +240,43 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
                     state = lazyListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { offset ->
-                                    lazyListState.layoutInfo.visibleItemsInfo
-                                        .firstOrNull { item ->
-                                            offset.y.toInt() in item.offset..(item.offset + item.size)
-                                        }?.also { item ->
-                                            draggedItemIndex = item.index
-                                            dragOffset = 0f
-                                            isDraggingActive = true
-                                        }
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffset += dragAmount.y
-
-                                    val currentDraggedIndex = draggedItemIndex ?: return@detectDragGesturesAfterLongPress
-                                    val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
-                                    val spacingPx = with(density) { 16.dp.toPx() }
-
-                                    // --- 修改开始：定向查找相邻 Item ---
-                                    val targetItem = if (dragAmount.y < 0) {
-                                        // 向上拖动：只检查 Index - 1
-                                        visibleItems.find { it.index == currentDraggedIndex - 1 }?.takeIf { item ->
-                                            dragOffset < -(item.size + spacingPx) / 2f
-                                        }
-                                    } else {
-                                        // 向下拖动：只检查 Index + 1
-                                        visibleItems.find { it.index == currentDraggedIndex + 1 }?.takeIf { item ->
-                                            dragOffset > (item.size + spacingPx) / 2f
-                                        }
-                                    }
-                                    // --- 修改结束 ---
-
-                                    if (targetItem != null) {
-                                        val adjustment = targetItem.size + spacingPx
-                                        homeViewModel.moveAccount(context, currentDraggedIndex, targetItem.index)
-
+                                    .dragToReorder(
+                                    lazyListState = lazyListState,
+                                    density = density,
+                                    getDraggedIndex = { draggedItemIndex },
+                                        getDragOffset = { dragOffset },
+                                    onDragStart = { index ->
+                                        draggedItemIndex = index
+                                        dragOffset = 0f
+                                        isDraggingActive = true
+                                    },
+                                    onDragMove = { delta -> dragOffset += delta },
+                                    onSwap = { from, to, adjustment ->
+                                        homeViewModel.moveAccount(context, from, to)
                                         // 更新当前拖动索引
-                                        draggedItemIndex = targetItem.index
-
+                                        draggedItemIndex = to
                                         // 调整 Offset 以保持视觉平滑
-                                        if (targetItem.index > currentDraggedIndex) {
+                                        if (to > from) {
                                             dragOffset -= adjustment
                                         } else {
                                             dragOffset += adjustment
                                         }
-                                    }
-                                },
-                                onDragEnd = {
-                                    isDraggingActive = false
-                                    scope.launch {
-                                        Animatable(dragOffset).animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) {
-                                            dragOffset = value
+                                    },
+                                    onDragEnd = {
+                                        isDraggingActive = false
+                                        scope.launch {
+                                            Animatable(dragOffset).animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) {
+                                                dragOffset = value
+                                            }
+                                            draggedItemIndex = null
                                         }
+                                    },
+                                    onDragCancel = {
+                                        isDraggingActive = false
                                         draggedItemIndex = null
+                                        dragOffset = 0f
                                     }
-                                },
-                                onDragCancel = {
-                                    isDraggingActive = false
-                                    draggedItemIndex = null
-                                    dragOffset = 0f
-                                }
-                            )
-                        },
+                                ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
                 ) {
@@ -272,7 +305,7 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
                         ) {
                             AccountItemCard(
                                 account = account,
-                                progress = currentProgress,
+                                progressProvider = { currentProgress },
                                 step = currentStep,
                                 onEditPasswordClick = {
                                     selectedAccount.value = account
@@ -326,7 +359,7 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
 @Composable
 fun AccountItemCard(
     account: Account,
-    progress: Float,
+    progressProvider: () -> Float,
     step: Long,
     onEditPasswordClick: () -> Unit,
     onDeleteClick: () -> Unit
@@ -378,7 +411,7 @@ fun AccountItemCard(
 
                 if (account.hasOtp && account.secretKey.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OtpSection(account, progress, step)
+                    OtpSection(account, progressProvider, step)
                 }
             }
 
@@ -566,7 +599,7 @@ fun EditPasswordDialog(
 }
 
 @Composable
-fun OtpSection(account: Account, progress: Float, step: Long) {
+fun OtpSection(account: Account, progressProvider: () -> Float, step: Long) {
     val context = LocalContext.current
     val otpCode = remember(step, account.secretKey) {
         TotpUtil.generateTOTP(account.secretKey, account.algorithm)
@@ -602,7 +635,7 @@ fun OtpSection(account: Account, progress: Float, step: Long) {
             Text(text = "${remainingSeconds}s", style = MaterialTheme.typography.labelMedium, color = progressColor, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(8.dp))
             CircularProgressIndicator(
-                progress = { progress },
+                progress = progressProvider,
                 modifier = Modifier.size(16.dp),
                 strokeWidth = 3.dp,
                 color = progressColor,
