@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Update
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -47,11 +47,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,23 +84,23 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
         }
     }
 
-    var isBiometricEnabled by remember {
+    val isBiometricEnabled = remember {
         mutableStateOf(SecurityUtil.isBiometricEnabled(context))
     }
     val canUseBiometric = remember { SecurityUtil.canUseBiometric(context) }
     
-    var autoLockTime by remember {
+    val autoLockTime = remember {
         mutableLongStateOf(SecurityUtil.getAutoLockTime(context))
     }
-    var showTimeMenu by remember { mutableStateOf(false) }
+    val showTimeMenu = remember { mutableStateOf(false) }
 
-    // 使用 .value 显式访问，解决警告并修复逻辑错误
+    // 全部统一为 val + .value 显式模式，杜绝一切编译警告和逻辑混淆
     val showExportDialog = remember { mutableStateOf(false) }
     val showImportDialog = remember { mutableStateOf(false) }
     val backupPassword = remember { mutableStateOf("") }
     val pendingImportUri = remember { mutableStateOf<android.net.Uri?>(null) }
     
-    var isUpdateCheckAllowed by remember { mutableStateOf(SecurityUtil.isUpdateCheckAllowed(context)) }
+    val isUpdateCheckAllowed = remember { mutableStateOf(SecurityUtil.isUpdateCheckAllowed(context)) }
     val showConsentDialog = remember { mutableStateOf(false) }
     val isCheckingUpdate = remember { mutableStateOf(false) }
 
@@ -243,14 +241,14 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
             confirmButton = {
                 TextButton(onClick = {
                     SecurityUtil.setUpdateCheckAllowed(context, true)
-                    isUpdateCheckAllowed = true
+                    isUpdateCheckAllowed.value = true
                     showConsentDialog.value = false
                 }) { Text("同意开启", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     SecurityUtil.setUpdateCheckAllowed(context, false)
-                    isUpdateCheckAllowed = false
+                    isUpdateCheckAllowed.value = false
                     showConsentDialog.value = false
                 }) { Text("保持离线") }
             }
@@ -294,18 +292,18 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         AboutItem(
                             icon = Icons.Default.Timer,
                             label = "自动锁定超时",
-                            value = when(autoLockTime) {
+                            value = when(autoLockTime.longValue) {
                                 15000L -> "15 秒"
                                 30000L -> "30 秒"
                                 60000L -> "60 秒"
-                                else -> "${autoLockTime / 1000} 秒"
+                                else -> "${autoLockTime.longValue / 1000} 秒"
                             },
-                            onClick = { showTimeMenu = true }
+                            onClick = { showTimeMenu.value = true }
                         )
                         
                         DropdownMenu(
-                            expanded = showTimeMenu,
-                            onDismissRequest = { showTimeMenu = false },
+                            expanded = showTimeMenu.value,
+                            onDismissRequest = { showTimeMenu.value = false },
                             shape = RoundedCornerShape(16.dp),
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
@@ -314,8 +312,8 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                                     text = { Text("${time / 1000} 秒", fontWeight = FontWeight.Medium) },
                                     onClick = {
                                         SecurityUtil.setAutoLockTime(context, time)
-                                        autoLockTime = time
-                                        showTimeMenu = false
+                                        autoLockTime.longValue = time
+                                        showTimeMenu.value = false
                                     }
                                 )
                             }
@@ -339,10 +337,10 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Switch(
-                            checked = isBiometricEnabled,
+                            checked = isBiometricEnabled.value,
                             onCheckedChange = { enabled ->
                                 SecurityUtil.setBiometricEnabled(context, enabled)
-                                isBiometricEnabled = enabled
+                                isBiometricEnabled.value = enabled
                             },
                             enabled = canUseBiometric
                         )
@@ -406,10 +404,10 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     AboutItem(
-                        icon = if (isUpdateCheckAllowed) Icons.Default.Update else Icons.Default.CloudOff,
+                        icon = if (isUpdateCheckAllowed.value) Icons.Default.Update else Icons.Default.CloudOff,
                         label = "检查更新",
-                        value = if (isCheckingUpdate.value) "检查中..." else if (isUpdateCheckAllowed) "获取最新版" else "已禁用",
-                        onClick = if (isUpdateCheckAllowed && !isCheckingUpdate.value) {
+                        value = if (isCheckingUpdate.value) "检查中..." else if (isUpdateCheckAllowed.value) "获取最新版" else "已禁用",
+                        onClick = if (isUpdateCheckAllowed.value && !isCheckingUpdate.value) {
                             {
                                 isCheckingUpdate.value = true
                                 homeViewModel.checkUpdate(
@@ -433,7 +431,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         } else null
                     )
                     
-                    if (!isUpdateCheckAllowed) {
+                    if (!isUpdateCheckAllowed.value) {
                         TextButton(
                             onClick = { showConsentDialog.value = true },
                             modifier = Modifier.padding(start = 48.dp)
@@ -448,7 +446,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         TextButton(
                             onClick = { 
                                 SecurityUtil.setUpdateCheckAllowed(context, false)
-                                isUpdateCheckAllowed = false
+                                isUpdateCheckAllowed.value = false
                                 Toast.makeText(context, "已取消联网授权，恢复离线状态", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.padding(start = 48.dp)
