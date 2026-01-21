@@ -11,9 +11,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import uniffi.rust_core.Account
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.UnknownHostException
+import java.net.SocketTimeoutException
 
 class HomeViewModel : ViewModel() {
     private val _accounts = mutableStateListOf<Account>()
@@ -60,14 +65,11 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // --- 排序逻辑 ---
     fun moveAccount(context: Context, fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex || fromIndex !in _accounts.indices || toIndex !in _accounts.indices) return
         _accounts.add(toIndex, _accounts.removeAt(fromIndex))
         scheduleSave(context)
     }
-
-    // --- 备份导出与导入 ---
 
     fun exportBackup(password: String): String {
         val json = SecurityUtil.accountsToJson(_accounts.toList())
@@ -110,5 +112,52 @@ class HomeViewModel : ViewModel() {
                 onError("导入失败: 密码错误或文件损坏")
             }
         }
+    }
+
+    fun checkUpdate(
+        currentVersion: String,
+        onResult: (hasUpdate: Boolean, latestVersion: String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val url = URL("https://api.github.com/repos/Ranpers/Cerberus/releases/latest")
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+
+                    if (connection.responseCode == 200) {
+                        val response = connection.inputStream.bufferedReader().use { it.readText() }
+                        val json = JSONObject(response)
+                        val latestTag = json.getString("tag_name").removePrefix("v")
+                        val hasUpdate = isVersionNewer(currentVersion, latestTag)
+                        Pair(hasUpdate, latestTag)
+                    } else {
+                        throw Exception("服务器响应异常: ${connection.responseCode}")
+                    }
+                }
+                onResult(result.first, result.second)
+            } catch (_ : UnknownHostException) {
+                onError("网络不可用，请检查联网设置")
+            } catch (_ : SocketTimeoutException) {
+                onError("连接 GitHub 超时，请稍后再试")
+            } catch (e: Exception) {
+                onError("检查失败: ${e.message ?: "网络请求异常"}")
+            }
+        }
+    }
+
+    private fun isVersionNewer(current: String, latest: String): Boolean {
+        val currParts = current.split(".").mapNotNull { it.toIntOrNull() }
+        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+        
+        for (i in 0 until minOf(currParts.size, latestParts.size)) {
+            if (latestParts[i] > currParts[i]) return true
+            if (latestParts[i] < currParts[i]) return false
+        }
+        return latestParts.size > currParts.size
     }
 }

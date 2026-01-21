@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Update
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -42,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -73,7 +75,6 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // 安全增强：禁止截屏和录屏
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
@@ -90,7 +91,7 @@ class MainActivity : FragmentActivity() {
                     
                     var isUnlocked by rememberSaveable { mutableStateOf(false) }
                     var showPasswordInput by rememberSaveable { mutableStateOf(false) }
-                    var showTerms by rememberSaveable { mutableStateOf(false) }
+                    var onboardingStep by rememberSaveable { mutableIntStateOf(if (SecurityUtil.isTermsAccepted(context)) 0 else 1) }
                     var currentScreen by rememberSaveable { mutableStateOf("home") }
                     var isCheckingAuth by remember { mutableStateOf(true) }
 
@@ -111,10 +112,9 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
-                    // 统一的身份验证检查逻辑
                     val performAuthCheck = {
                         if (!SecurityUtil.isTermsAccepted(context)) {
-                            showTerms = true
+                            onboardingStep = 1
                             isCheckingAuth = false
                         } else if (!SecurityUtil.isMasterPasswordSet(context)) {
                             showPasswordInput = true
@@ -129,12 +129,10 @@ class MainActivity : FragmentActivity() {
                                 isCheckingAuth = false
                             }
                         } else {
-                            // 已解锁且未超时
                             isCheckingAuth = false
                         }
                     }
 
-                    // 监听应用全局生命周期
                     DisposableEffect(Unit) {
                         val observer = LifecycleEventObserver { _, event ->
                             when (event) {
@@ -142,7 +140,6 @@ class MainActivity : FragmentActivity() {
                                     performAuthCheck()
                                 }
                                 Lifecycle.Event.ON_STOP -> {
-                                    // 只有在已解锁状态下进入后台才记录时间
                                     if (isUnlocked) {
                                         SecurityUtil.markEnterBackground(context)
                                     }
@@ -156,7 +153,6 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    // 处理返回键
                     if (isUnlocked && currentScreen == "settings") {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                             PredictiveBackHandler { progress ->
@@ -187,19 +183,25 @@ class MainActivity : FragmentActivity() {
                         }
                     ) {
                         when {
+                            onboardingStep == 1 -> {
+                                TermsAndConditionsScreen(onAccepted = {
+                                    onboardingStep = 2
+                                })
+                            }
+                            onboardingStep == 2 -> {
+                                UpdateConsentScreen(onDecision = { allowed ->
+                                    SecurityUtil.setUpdateCheckAllowed(context, allowed)
+                                    SecurityUtil.setTermsAccepted(context)
+                                    onboardingStep = 0
+                                    performAuthCheck()
+                                })
+                            }
                             isUnlocked -> {
                                 if (currentScreen == "home") {
                                     HomeScreen(onSettingsClick = { currentScreen = "settings" })
                                 } else {
                                     SettingsScreen(onBack = { currentScreen = "home" })
                                 }
-                            }
-                            showTerms -> {
-                                TermsAndConditionsScreen(onAccepted = {
-                                    SecurityUtil.setTermsAccepted(context)
-                                    showTerms = false
-                                    performAuthCheck()
-                                })
                             }
                             isCheckingAuth -> {
                                 SplashPlaceholder()
@@ -262,6 +264,72 @@ class MainActivity : FragmentActivity() {
             .build()
 
         biometricPrompt.authenticate(promptInfo)
+    }
+}
+
+@Composable
+fun UpdateConsentScreen(onDecision: (Boolean) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(48.dp))
+        Icon(
+            imageVector = Icons.Default.Update,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "软件更新偏好",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Cerberus 默认不请求任何联网权限。为了方便您获取最新功能和安全补丁，您可以选择开启\"检查更新\"功能：",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                TermItem("隐私保护", "开启后，应用仅在您手动点击\"检查更新\"时访问 GitHub API。我们不会收集任何个人信息或上传您的令牌数据。")
+                TermItem("透明度", "未经您的明确允许，Cerberus 绝不会在后台静默使用 INTERNET 权限。")
+                TermItem("随时更改", "您可以随时在\"设置\"中更改此项偏好。若选择不开启，您仍可手动前往 GitHub 仓库下载更新。")
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { onDecision(true) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium
+        ) {
+            Text("同意开启检查更新", fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+
+        TextButton(
+            onClick = { onDecision(false) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("保持离线，不开启")
+        }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -339,7 +407,7 @@ fun TermsAndConditionsScreen(onAccepted: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium
         ) {
-            Text("同意并开始使用", fontWeight = FontWeight.Bold)
+            Text("下一步", fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(24.dp))
     }

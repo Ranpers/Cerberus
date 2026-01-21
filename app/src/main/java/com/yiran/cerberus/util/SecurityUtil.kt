@@ -26,6 +26,7 @@ object SecurityUtil {
     private const val KEY_AUTO_LOCK_TIME = "auto_lock_time"
     private const val DEFAULT_AUTO_LOCK_TIME = 30 * 1000L // 默认 30 秒
     private const val KEY_LAST_BACKGROUND_TIME = "last_background_time"
+    private const val KEY_UPDATE_CHECK_ALLOWED = "update_check_allowed"
 
     init {
         loadNativeLibraries()
@@ -75,14 +76,12 @@ object SecurityUtil {
     }
 
     fun markEnterBackground(context: Context) {
-        // 使用 SystemClock.elapsedRealtime 防止用户通过修改系统时间绕过锁定
         getEncryptedPrefs(context).edit {
             putLong(KEY_LAST_BACKGROUND_TIME, SystemClock.elapsedRealtime())
         }
     }
 
     fun markAuthenticated(context: Context) {
-        // 标记已成功验证，清除后台计时
         getEncryptedPrefs(context).edit {
             putLong(KEY_LAST_BACKGROUND_TIME, 0L)
         }
@@ -90,7 +89,6 @@ object SecurityUtil {
 
     fun shouldReauthenticate(context: Context): Boolean {
         val lastTime = getEncryptedPrefs(context).getLong(KEY_LAST_BACKGROUND_TIME, 0L)
-        // 如果 lastTime 为 0，表示应用处于活跃状态或刚解锁
         if (lastTime == 0L) return false
         
         val elapsed = SystemClock.elapsedRealtime() - lastTime
@@ -104,6 +102,9 @@ object SecurityUtil {
     fun setAutoLockTime(context: Context, timeMs: Long) {
         getEncryptedPrefs(context).edit { putLong(KEY_AUTO_LOCK_TIME, timeMs) }
     }
+
+    fun isUpdateCheckAllowed(context: Context): Boolean = getEncryptedPrefs(context).getBoolean(KEY_UPDATE_CHECK_ALLOWED, false)
+    fun setUpdateCheckAllowed(context: Context, allowed: Boolean) = getEncryptedPrefs(context).edit { putBoolean(KEY_UPDATE_CHECK_ALLOWED, allowed) }
 
     fun isTermsAccepted(context: Context): Boolean = getEncryptedPrefs(context).getBoolean(KEY_TERMS_ACCEPTED, false)
     fun setTermsAccepted(context: Context) = getEncryptedPrefs(context).edit { putBoolean(KEY_TERMS_ACCEPTED, true) }

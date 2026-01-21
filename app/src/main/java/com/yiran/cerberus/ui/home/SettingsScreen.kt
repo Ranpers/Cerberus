@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -68,7 +70,6 @@ import java.io.OutputStreamWriter
 fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
     
-    // 获取应用版本号
     val versionName = remember {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -79,9 +80,9 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
             } else {
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0).versionName
-            } ?: "1.0.0"
+            } ?: "1.1.0"
         } catch (_ : Exception) {
-            "1.0.0"
+            "1.1.0"
         }
     }
 
@@ -95,12 +96,16 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
     }
     var showTimeMenu by remember { mutableStateOf(false) }
 
+    // 使用 .value 显式访问，解决警告并修复逻辑错误
     val showExportDialog = remember { mutableStateOf(false) }
     val showImportDialog = remember { mutableStateOf(false) }
     val backupPassword = remember { mutableStateOf("") }
     val pendingImportUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    
+    var isUpdateCheckAllowed by remember { mutableStateOf(SecurityUtil.isUpdateCheckAllowed(context)) }
+    val showConsentDialog = remember { mutableStateOf(false) }
+    val isCheckingUpdate = remember { mutableStateOf(false) }
 
-    // --- 导出执行 ---
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri ->
@@ -123,7 +128,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
         }
     }
 
-    // --- 导入逻辑 ---
     val openDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -133,7 +137,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
         }
     }
 
-    // 导出密码输入对话框
     if (showExportDialog.value) {
         StyledDialog(
             onDismissRequest = {
@@ -147,8 +150,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                     StyledTextField(
                         value = backupPassword.value,
                         onValueChange = { backupPassword.value = it },
-                        label = "密码",
-                        trailingIcon = null
+                        label = "密码"
                     )
                 }
             },
@@ -172,7 +174,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
         )
     }
 
-    // 导入密码输入对话框
     if (showImportDialog.value) {
         StyledDialog(
             onDismissRequest = {
@@ -186,8 +187,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                     StyledTextField(
                         value = backupPassword.value,
                         onValueChange = { backupPassword.value = it },
-                        label = "密码",
-                        trailingIcon = null
+                        label = "密码"
                     )
                 }
             },
@@ -221,6 +221,42 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
         )
     }
 
+    if (showConsentDialog.value) {
+        StyledDialog(
+            onDismissRequest = { showConsentDialog.value = false },
+            title = "软件更新偏好说明",
+            content = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Cerberus 默认不请求任何联网权限。为了方便您获取最新功能和安全补丁，您可以选择开启\"检查更新\"功能：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "• 开启后，仅在您手动点击时访问 GitHub API\n• 我们绝不会收集个人信息或上传您的令牌数据\n• 未经您的明确允许，应用绝不会在后台静默联网",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    SecurityUtil.setUpdateCheckAllowed(context, true)
+                    isUpdateCheckAllowed = true
+                    showConsentDialog.value = false
+                }) { Text("同意开启", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    SecurityUtil.setUpdateCheckAllowed(context, false)
+                    isUpdateCheckAllowed = false
+                    showConsentDialog.value = false
+                }) { Text("保持离线") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -240,7 +276,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // --- 安全设置 ---
             Text(
                 text = "安全",
                 style = MaterialTheme.typography.labelLarge,
@@ -255,7 +290,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(8.dp)) {
-                    // 自动锁定时间配置
                     Box(modifier = Modifier.fillMaxWidth()) {
                         AboutItem(
                             icon = Icons.Default.Timer,
@@ -318,7 +352,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 数据管理 ---
             Text(
                 text = "数据管理",
                 style = MaterialTheme.typography.labelLarge,
@@ -351,7 +384,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 关于我们 ---
             Text(
                 text = "关于 Cerberus",
                 style = MaterialTheme.typography.labelLarge,
@@ -372,10 +404,71 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    AboutItem(
+                        icon = if (isUpdateCheckAllowed) Icons.Default.Update else Icons.Default.CloudOff,
+                        label = "检查更新",
+                        value = if (isCheckingUpdate.value) "检查中..." else if (isUpdateCheckAllowed) "获取最新版" else "已禁用",
+                        onClick = if (isUpdateCheckAllowed && !isCheckingUpdate.value) {
+                            {
+                                isCheckingUpdate.value = true
+                                homeViewModel.checkUpdate(
+                                    currentVersion = versionName,
+                                    onResult = { hasUpdate, latest ->
+                                        isCheckingUpdate.value = false
+                                        if (hasUpdate) {
+                                            val intent = Intent(Intent.ACTION_VIEW, "https://github.com/Ranpers/Cerberus/releases/latest".toUri())
+                                            context.startActivity(intent)
+                                            Toast.makeText(context, "发现新版本: v$latest，正在跳转 GitHub...", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onError = { error ->
+                                        isCheckingUpdate.value = false
+                                        Toast.makeText(context, "检查失败: $error", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        } else null
+                    )
+                    
+                    if (!isUpdateCheckAllowed) {
+                        TextButton(
+                            onClick = { showConsentDialog.value = true },
+                            modifier = Modifier.padding(start = 48.dp)
+                        ) {
+                            Text(
+                                "为何禁用？查看条款并开启",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = { 
+                                SecurityUtil.setUpdateCheckAllowed(context, false)
+                                isUpdateCheckAllowed = false
+                                Toast.makeText(context, "已取消联网授权，恢复离线状态", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.padding(start = 48.dp)
+                        ) {
+                            Text(
+                                "取消联网授权并恢复离线",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
 
-                    AboutItem(Icons.Default.Person, "作者", "Yiran")
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    AboutItem(
+                        icon = Icons.Default.Person, 
+                        label = "作者", 
+                        value = "Yiran",
+                        highlightValue = true
+                    )
                     AboutItem(Icons.Default.Email, "反馈邮箱", "yi_ran@aliyun.com") {
                         val intent = Intent(Intent.ACTION_SENDTO).apply {
                             data = "mailto:yi_ran@aliyun.com".toUri()
@@ -413,7 +506,13 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
 }
 
 @Composable
-fun AboutItem(icon: ImageVector, label: String, value: String, onClick: (() -> Unit)? = null) {
+fun AboutItem(
+    icon: ImageVector, 
+    label: String, 
+    value: String, 
+    highlightValue: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -437,13 +536,18 @@ fun AboutItem(icon: ImageVector, label: String, value: String, onClick: (() -> U
             )
         }
         Spacer(modifier = Modifier.width(16.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Text(
+            text = label, 
+            style = MaterialTheme.typography.bodyLarge, 
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (onClick != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (onClick != null) FontWeight.Bold else FontWeight.Normal
+            color = if (onClick != null || highlightValue) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (onClick != null || highlightValue) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
