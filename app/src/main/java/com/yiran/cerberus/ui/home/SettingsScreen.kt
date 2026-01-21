@@ -94,7 +94,6 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
     }
     val showTimeMenu = remember { mutableStateOf(false) }
 
-    // 全部统一为 val + .value 显式模式，杜绝一切编译警告和逻辑混淆
     val showExportDialog = remember { mutableStateOf(false) }
     val showImportDialog = remember { mutableStateOf(false) }
     val backupPassword = remember { mutableStateOf("") }
@@ -222,16 +221,16 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
     if (showConsentDialog.value) {
         StyledDialog(
             onDismissRequest = { showConsentDialog.value = false },
-            title = "软件更新偏好说明",
+            title = "联网偏好说明",
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Cerberus 默认不请求任何联网权限。为了方便您获取最新功能和安全补丁，您可以选择开启\"检查更新\"功能：",
+                        text = "Cerberus 默认禁用所有联网功能。为了您可以及时获取安全修复与新特性，您可以选择开启“检查更新”服务：",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "• 开启后，仅在您手动点击时访问 GitHub API\n• 我们绝不会收集个人信息或上传您的令牌数据\n• 未经您的明确允许，应用绝不会在后台静默联网",
+                        text = "• 开启后，仅在您手动点击时访问 GitHub API 获取版本号\n• 我们郑重承诺：应用绝不会收集或上传您的任何令牌数据\n• 未经您的明确允许，应用绝不会在后台静默使用联网权限",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
@@ -397,7 +396,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Cerberus 是一款专注于本地隐私的身份验证工具。我们坚持零联网权限，所有加密数据均存储在您的物理设备中。",
+                        text = "Cerberus 是一款专注于隐私安全的身份验证工具。我们坚持零网络通信原则，所有数据仅存储于您的物理设备中。",
                         style = MaterialTheme.typography.bodyMedium,
                         lineHeight = 22.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -440,7 +439,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                             modifier = Modifier.padding(start = 48.dp)
                         ) {
                             Text(
-                                "为何禁用？查看条款并开启",
+                                "为何禁用？查看详情并开启",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )

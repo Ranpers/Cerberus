@@ -139,8 +139,6 @@ class MainActivity : FragmentActivity() {
                                     performAuthCheck()
                                 }
                                 Lifecycle.Event.ON_STOP -> {
-                                    // 只有在非配置更改（如旋转屏幕）导致的停止时，才标记进入后台
-                                    // 直接使用 activity.lifecycle 规避 ProcessLifecycleOwner 的 700ms 延迟，实现真正的“立即”锁定
                                     if (isUnlocked && !activity.isChangingConfigurations) {
                                         SecurityUtil.markEnterBackground(context)
                                     }
@@ -248,12 +246,7 @@ class MainActivity : FragmentActivity() {
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || 
-                        errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
-                        onCancel()
-                    } else {
-                        onCancel()
-                    }
+                    onCancel()
                 }
             })
 
@@ -286,7 +279,7 @@ fun UpdateConsentScreen(onDecision: (Boolean) -> Unit) {
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "软件更新偏好",
+            text = "联网偏好与更新说明",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.ExtraBold
         )
@@ -299,15 +292,15 @@ fun UpdateConsentScreen(onDecision: (Boolean) -> Unit) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Cerberus 默认不请求任何联网权限。为了方便您获取最新功能和安全补丁，您可以选择开启\"检查更新\"功能：",
+                    text = "Cerberus 默认禁用所有联网功能。为了您可以及时获取安全修复与新特性，您可以选择开启“检查更新”服务：",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                TermItem("隐私保护", "开启后，应用仅在您手动点击\"检查更新\"时访问 GitHub API。我们不会收集任何个人信息或上传您的令牌数据。")
-                TermItem("透明度", "未经您的明确允许，Cerberus 绝不会在后台静默使用 INTERNET 权限。")
-                TermItem("随时更改", "您可以随时在\"设置\"中更改此项偏好。若选择不开启，您仍可手动前往 GitHub 仓库下载更新。")
+                TermItem("透明联网", "开启后，应用仅在您手动点击“检查更新”时，通过 GitHub 公开 API 获取最新版本号。")
+                TermItem("隐私红线", "我们郑重承诺：应用绝不会静默上传您的任何令牌数据、账户指纹或个人统计信息。")
+                TermItem("绝对控制", "您可以随时在设置中撤销联网授权。若保持离线，您可以定期前往项目仓库手动获取更新。")
             }
         }
 
@@ -328,7 +321,7 @@ fun UpdateConsentScreen(onDecision: (Boolean) -> Unit) {
             onClick = { onDecision(false) },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("保持离线，不开启")
+            Text("保持离线，绝不联网")
         }
         Spacer(modifier = Modifier.height(24.dp))
     }
@@ -367,18 +360,18 @@ fun TermsAndConditionsScreen(onAccepted: () -> Unit) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "在开始保护您的令牌库之前，请阅读并同意以下安全与免责声明：",
+                    text = "在开始保护您的令牌库之前，请仔细阅读并同意以下安全条款与免责声明：",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                TermItem("零网络通信", "Cerberus 坚持零联网权限设计。所有数据均经 AES 硬件级加密后存储于您的物理设备中，绝不上传云端。")
-                TermItem("主密码唯一性", "主密码是访问加密数据库的唯一凭证。应用无法找回或重置主密码。若遗忘主密码，您的所有数据将永久无法读取。")
-                TermItem("备份风险提示", "导出的加密备份文件（.cerb）由您设置的备份密码保护。请务必记住此密码。若备份文件丢失、损坏或遗忘备份密码导致无法恢复，作者不承担任何责任。")
-                TermItem("免责声明", "由于卸载应用、清除缓存、刷机、设备损坏、系统故障或用户操作失误（如误删、操作不当）导致的数据丢失，属于用户个人风险，与作者及开发者无关。")
-                TermItem("责任边界", "本应用作为开源工具提供。严禁对应用进行篡改。因系统环境异常、第三方破解软件或任何形式的非正常操作导致的数据泄露或损坏，作者概不负责。")
+                TermItem("数据本地化", "您的所有数据均经 AES 硬件级算法加密后存储于设备私有空间，不设立云端服务器，开发者亦无法获取。")
+                TermItem("主密码关键性", "主密码是解密的唯一凭证。基于安全设计，应用无法重置或找回密码。若遗忘主密码，数据将永久锁定。")
+                TermItem("备份自主权", "加密备份（.cerb）由您设置的备份密码保护。您负有安全保管备份文件及密码的全部责任，丢失将无法找回。")
+                TermItem("风险自担声明", "由于系统损坏、卸载应用（未备份）、ROOT权限风险或用户操作失误导致的数据丢失，属于用户个人风险。")
+                TermItem("责任边界", "作为开源工具，开发者不对因第三方劫持、系统故障或非正常软件环境引起的数据泄露或损坏承担任何法律责任。")
             }
         }
 
