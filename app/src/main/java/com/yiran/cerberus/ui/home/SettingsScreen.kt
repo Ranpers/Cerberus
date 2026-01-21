@@ -1,6 +1,8 @@
 package com.yiran.cerberus.ui.home
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,6 +67,24 @@ import java.io.OutputStreamWriter
 @Composable
 fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
+    
+    // 获取应用版本号
+    val versionName = remember {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0)
+                ).versionName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } ?: "1.0.0"
+        } catch (_ : Exception) {
+            "1.0.0"
+        }
+    }
+
     var isBiometricEnabled by remember {
         mutableStateOf(SecurityUtil.isBiometricEnabled(context))
     }
@@ -376,7 +396,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Version 1.1.0",
+                    text = "Version $versionName",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
