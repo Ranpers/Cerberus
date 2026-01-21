@@ -197,24 +197,35 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
 
                                     val currentDraggedIndex = draggedItemIndex ?: return@detectDragGesturesAfterLongPress
                                     val visibleItems = lazyListState.layoutInfo.visibleItemsInfo
-                                    
-                                    val targetItem = visibleItems.firstOrNull { item ->
-                                        if (item.index == currentDraggedIndex) return@firstOrNull false
-                                        val spacingPx = with(density) { 16.dp.toPx() }
-                                        
-                                        if (dragAmount.y > 0) {
-                                            item.index > currentDraggedIndex && dragOffset > (item.size + spacingPx) / 2f
-                                        } else {
-                                            item.index < currentDraggedIndex && dragOffset < -(item.size + spacingPx) / 2f
+                                    val spacingPx = with(density) { 16.dp.toPx() }
+
+                                    // --- 修改开始：定向查找相邻 Item ---
+                                    val targetItem = if (dragAmount.y < 0) {
+                                        // 向上拖动：只检查 Index - 1
+                                        visibleItems.find { it.index == currentDraggedIndex - 1 }?.takeIf { item ->
+                                            dragOffset < -(item.size + spacingPx) / 2f
+                                        }
+                                    } else {
+                                        // 向下拖动：只检查 Index + 1
+                                        visibleItems.find { it.index == currentDraggedIndex + 1 }?.takeIf { item ->
+                                            dragOffset > (item.size + spacingPx) / 2f
                                         }
                                     }
+                                    // --- 修改结束 ---
 
                                     if (targetItem != null) {
-                                        val spacingPx = with(density) { 16.dp.toPx() }
                                         val adjustment = targetItem.size + spacingPx
                                         homeViewModel.moveAccount(context, currentDraggedIndex, targetItem.index)
+
+                                        // 更新当前拖动索引
                                         draggedItemIndex = targetItem.index
-                                        if (targetItem.index > currentDraggedIndex) dragOffset -= adjustment else dragOffset += adjustment
+
+                                        // 调整 Offset 以保持视觉平滑
+                                        if (targetItem.index > currentDraggedIndex) {
+                                            dragOffset -= adjustment
+                                        } else {
+                                            dragOffset += adjustment
+                                        }
                                     }
                                 },
                                 onDragEnd = {
@@ -242,7 +253,7 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
                             targetValue = if (isDraggingActive && isDragging) 16.dp else 0.dp,
                             label = "drag_elevation"
                         )
-                        
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -347,7 +358,7 @@ fun AccountItemCard(
                         Text(text = account.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(text = account.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    
+
                     // 将 DragHandle 移至右侧，并保持低透明度
                     Icon(
                         imageVector = Icons.Default.DragHandle,
@@ -376,7 +387,7 @@ fun AccountItemCard(
                     Icon(Icons.Default.MoreVert, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
                 }
                 DropdownMenu(
-                    expanded = menuExpanded.value, 
+                    expanded = menuExpanded.value,
                     onDismissRequest = { menuExpanded.value = false },
                     shape = RoundedCornerShape(20.dp),
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -427,7 +438,7 @@ fun StyledDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                
+
                 Box(modifier = Modifier.fillMaxWidth()) {
                     content()
                 }
@@ -743,14 +754,14 @@ fun AddAccountDialog(
                                 .clickable { expanded.value = true }
                         )
                         DropdownMenu(
-                            expanded = expanded.value, 
+                            expanded = expanded.value,
                             onDismissRequest = { expanded.value = false },
                             shape = RoundedCornerShape(16.dp),
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
                             OtpAlgorithm.entries.forEach { algo ->
                                 DropdownMenuItem(
-                                    text = { Text(algo.name) }, 
+                                    text = { Text(algo.name) },
                                     onClick = { selectedAlgo.value = algo; expanded.value = false }
                                 )
                             }
@@ -842,8 +853,8 @@ fun DeleteConfirmDialog(accountName: String, onDismiss: () -> Unit, onConfirm: (
             )
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { 
-                Text("永久删除", fontWeight = FontWeight.Bold) 
+            TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text("永久删除", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
