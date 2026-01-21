@@ -3,6 +3,13 @@ package com.yiran.cerberus.ui.home
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.setValue
+import com.yiran.cerberus.util.TotpUtil
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yiran.cerberus.util.SecurityUtil
@@ -25,6 +32,19 @@ class HomeViewModel : ViewModel() {
     val accounts: List<Account> = _accounts
 
     private var saveJob: Job? = null
+    private var totpJob: Job? = null
+
+    // UI state hoisted to ViewModel
+    var isAddDialogVisible by mutableStateOf(false)
+    var isDeleteDialogVisible by mutableStateOf(false)
+    var isEditPasswordDialogVisible by mutableStateOf(false)
+    var selectedAccount by mutableStateOf<Account?>(null)
+
+    // TOTP state (precomputed codes)
+    var totpProgress by mutableFloatStateOf(1f)
+    var totpStep by mutableLongStateOf(System.currentTimeMillis() / 30000)
+    private val _otpCodes = mutableStateMapOf<Int, String>()
+    val otpCodes: Map<Int, String> get() = _otpCodes
 
     fun loadAccounts(context: Context) {
         viewModelScope.launch {
@@ -33,6 +53,30 @@ class HomeViewModel : ViewModel() {
             }
             _accounts.clear()
             _accounts.addAll(loadedAccounts)
+            // start TOTP updates whenever accounts load
+            startTotpTicker()
+        }
+    }
+
+    private fun startTotpTicker() {
+        totpJob?.cancel()
+        totpJob = viewModelScope.launch {
+            while (true) {
+                totpProgress = TotpUtil.getProgress()
+                totpStep = System.currentTimeMillis() / 30000
+
+                withContext(Dispatchers.Default) {
+                    _accounts.filter { it.hasOtp && it.secretKey.isNotEmpty() }.forEach { acct ->
+                        try {
+                            val code = TotpUtil.generateTOTP(acct.secretKey, acct.algorithm)
+                            _otpCodes[acct.id] = code
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+
+                delay(1000)
+            }
         }
     }
 
@@ -49,6 +93,10 @@ class HomeViewModel : ViewModel() {
     fun addAccount(context: Context, account: Account) {
         _accounts.add(account)
         scheduleSave(context)
+        // ensure otpCodes updated
+        if (account.hasOtp && account.secretKey.isNotEmpty()) {
+            _otpCodes[account.id] = TotpUtil.generateTOTP(account.secretKey, account.algorithm)
+        }
     }
 
     fun deleteAccount(context: Context, account: Account) {
@@ -63,6 +111,29 @@ class HomeViewModel : ViewModel() {
             _accounts[index] = oldAccount.copy(password = newPassword)
             scheduleSave(context)
         }
+    }
+
+    fun selectAccountForEdit(account: Account) {
+        selectedAccount = account
+        isEditPasswordDialogVisible = true
+    }
+
+    fun closeEditPasswordDialog() {
+        isEditPasswordDialogVisible = false
+        selectedAccount = null
+    }
+
+    fun openAddDialog() { isAddDialogVisible = true }
+    fun closeAddDialog() { isAddDialogVisible = false }
+
+    fun selectAccountForDelete(account: Account) {
+        selectedAccount = account
+        isDeleteDialogVisible = true
+    }
+
+    fun closeDeleteDialog() {
+        isDeleteDialogVisible = false
+        selectedAccount = null
     }
 
     fun moveAccount(context: Context, fromIndex: Int, toIndex: Int) {
@@ -100,6 +171,7 @@ class HomeViewModel : ViewModel() {
                     withContext(Dispatchers.IO) {
                         SecurityUtil.saveAccounts(context, _accounts.toList())
                     }
+                    startTotpTicker()
                     onSuccess()
                 } else {
                     onError("备份文件内容为空")
@@ -112,6 +184,12 @@ class HomeViewModel : ViewModel() {
                 onError("导入失败: 密码错误或文件损坏")
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        totpJob?.cancel()
+        saveJob?.cancel()
     }
 
     fun checkUpdate(

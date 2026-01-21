@@ -63,12 +63,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,26 +77,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.yiran.cerberus.util.OtpAlgorithm
 import com.yiran.cerberus.util.PasswordGenerator
 import com.yiran.cerberus.util.TotpUtil
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uniffi.rust_core.Account
 
@@ -167,17 +162,7 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val accounts = homeViewModel.accounts
-    val lifecycleOwner = LocalLifecycleOwner.current
-
-    val showAddDialog = remember { mutableStateOf(false) }
-    val showDeleteDialog = remember { mutableStateOf(false) }
-    val showEditPasswordDialog = remember { mutableStateOf(false) }
-    val selectedAccount = remember { mutableStateOf<Account?>(null) }
-
-    var currentProgress by remember { mutableFloatStateOf(1f) }
-    var currentStep by remember { mutableLongStateOf(System.currentTimeMillis() / 30000) }
-    var isAppVisible by remember { mutableStateOf(true) }
-
+    
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     // 拖拽排序状态
@@ -186,27 +171,20 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var isDraggingActive by remember { mutableStateOf(false) }
 
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            isAppVisible = event == Lifecycle.Event.ON_RESUME || event == Lifecycle.Event.ON_START
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // Read UI state from ViewModel
+    val showAddDialog = homeViewModel.isAddDialogVisible
+    val showDeleteDialog = homeViewModel.isDeleteDialogVisible
+    val showEditPasswordDialog = homeViewModel.isEditPasswordDialogVisible
+    val selectedAccount = homeViewModel.selectedAccount
+
+    // Avoid reading totpProgress directly here to prevent HomeScreen recomposition every tick.
+    val progressProvider = remember { { homeViewModel.totpProgress } }
 
     LaunchedEffect(Unit) {
         homeViewModel.loadAccounts(context)
     }
 
-    LaunchedEffect(isAppVisible) {
-        if (isAppVisible) {
-            while (true) {
-                currentProgress = TotpUtil.getProgress()
-                currentStep = System.currentTimeMillis() / 30000
-                delay(100)
-            }
-        }
-    }
+    // TOTP updates are handled in HomeViewModel
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -223,7 +201,7 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog.value = true },
+                onClick = { homeViewModel.openAddDialog() },
                 shape = RoundedCornerShape(20.dp),
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -240,43 +218,43 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
                     state = lazyListState,
                     modifier = Modifier
                         .fillMaxSize()
-                                    .dragToReorder(
-                                    lazyListState = lazyListState,
-                                    density = density,
-                                    getDraggedIndex = { draggedItemIndex },
-                                        getDragOffset = { dragOffset },
-                                    onDragStart = { index ->
-                                        draggedItemIndex = index
-                                        dragOffset = 0f
-                                        isDraggingActive = true
-                                    },
-                                    onDragMove = { delta -> dragOffset += delta },
-                                    onSwap = { from, to, adjustment ->
-                                        homeViewModel.moveAccount(context, from, to)
-                                        // 更新当前拖动索引
-                                        draggedItemIndex = to
-                                        // 调整 Offset 以保持视觉平滑
-                                        if (to > from) {
-                                            dragOffset -= adjustment
-                                        } else {
-                                            dragOffset += adjustment
-                                        }
-                                    },
-                                    onDragEnd = {
-                                        isDraggingActive = false
-                                        scope.launch {
-                                            Animatable(dragOffset).animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) {
-                                                dragOffset = value
-                                            }
-                                            draggedItemIndex = null
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        isDraggingActive = false
-                                        draggedItemIndex = null
-                                        dragOffset = 0f
+                        .dragToReorder(
+                            lazyListState = lazyListState,
+                            density = density,
+                            getDraggedIndex = { draggedItemIndex },
+                            getDragOffset = { dragOffset },
+                            onDragStart = { index ->
+                                draggedItemIndex = index
+                                dragOffset = 0f
+                                isDraggingActive = true
+                            },
+                            onDragMove = { delta -> dragOffset += delta },
+                            onSwap = { from, to, adjustment ->
+                                homeViewModel.moveAccount(context, from, to)
+                                // 更新当前拖动索引
+                                draggedItemIndex = to
+                                // 调整 Offset 以保持视觉平滑
+                                if (to > from) {
+                                    dragOffset -= adjustment
+                                } else {
+                                    dragOffset += adjustment
+                                }
+                            },
+                            onDragEnd = {
+                                isDraggingActive = false
+                                scope.launch {
+                                    Animatable(dragOffset).animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) {
+                                        dragOffset = value
                                     }
-                                ),
+                                    draggedItemIndex = null
+                                }
+                            },
+                            onDragCancel = {
+                                isDraggingActive = false
+                                draggedItemIndex = null
+                                dragOffset = 0f
+                            }
+                        ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
                 ) {
@@ -305,16 +283,10 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
                         ) {
                             AccountItemCard(
                                 account = account,
-                                progressProvider = { currentProgress },
-                                step = currentStep,
-                                onEditPasswordClick = {
-                                    selectedAccount.value = account
-                                    showEditPasswordDialog.value = true
-                                },
-                                onDeleteClick = {
-                                    selectedAccount.value = account
-                                    showDeleteDialog.value = true
-                                }
+                                codeProvider = { homeViewModel.otpCodes[account.id] ?: "" },
+                                progressProvider = progressProvider,
+                                onEditPasswordClick = { homeViewModel.selectAccountForEdit(account) },
+                                onDeleteClick = { homeViewModel.selectAccountForDelete(account) }
                             )
                         }
                     }
@@ -323,34 +295,33 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
         }
     }
 
-    if (showAddDialog.value) {
+    if (showAddDialog) {
         AddAccountDialog(
-            onDismiss = { showAddDialog.value = false },
+            onDismiss = { homeViewModel.closeAddDialog() },
             onConfirm = { newAccount ->
                 homeViewModel.addAccount(context, newAccount)
-                showAddDialog.value = false
+                homeViewModel.closeAddDialog()
             }
         )
     }
-
-    if (showEditPasswordDialog.value && selectedAccount.value != null) {
+    if (showEditPasswordDialog && selectedAccount != null) {
         EditPasswordDialog(
-            account = selectedAccount.value!!,
-            onDismiss = { showEditPasswordDialog.value = false },
+            account = selectedAccount,
+            onDismiss = { homeViewModel.closeEditPasswordDialog() },
             onConfirm = { newPassword ->
-                homeViewModel.updatePassword(context, selectedAccount.value!!.id, newPassword)
-                showEditPasswordDialog.value = false
+                homeViewModel.updatePassword(context, selectedAccount.id, newPassword)
+                homeViewModel.closeEditPasswordDialog()
             }
         )
     }
 
-    if (showDeleteDialog.value && selectedAccount.value != null) {
+    if (showDeleteDialog && selectedAccount != null) {
         DeleteConfirmDialog(
-            accountName = selectedAccount.value!!.name,
-            onDismiss = { showDeleteDialog.value = false },
+            accountName = selectedAccount.name,
+            onDismiss = { homeViewModel.closeDeleteDialog() },
             onConfirm = {
-                homeViewModel.deleteAccount(context, selectedAccount.value!!)
-                showDeleteDialog.value = false
+                homeViewModel.deleteAccount(context, selectedAccount)
+                homeViewModel.closeDeleteDialog()
             }
         )
     }
@@ -359,8 +330,8 @@ fun HomeScreen(onSettingsClick: () -> Unit, homeViewModel: HomeViewModel = viewM
 @Composable
 fun AccountItemCard(
     account: Account,
+    codeProvider: () -> String,
     progressProvider: () -> Float,
-    step: Long,
     onEditPasswordClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -411,7 +382,7 @@ fun AccountItemCard(
 
                 if (account.hasOtp && account.secretKey.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OtpSection(account, progressProvider, step)
+                    OtpSection(codeProvider, progressProvider)
                 }
             }
 
@@ -599,13 +570,17 @@ fun EditPasswordDialog(
 }
 
 @Composable
-fun OtpSection(account: Account, progressProvider: () -> Float, step: Long) {
+fun OtpSection(codeProvider: () -> String, progressProvider: () -> Float) {
     val context = LocalContext.current
-    val otpCode = remember(step, account.secretKey) {
-        TotpUtil.generateTOTP(account.secretKey, account.algorithm)
+    val otpCode = codeProvider()
+
+    // Only recompute remaining seconds when the integer second changes.
+    val remainingSeconds by remember {
+        derivedStateOf {
+            (progressProvider() * 30f).toInt()
+        }
     }
 
-    val remainingSeconds = TotpUtil.getRemainingSeconds()
     val progressColor by animateColorAsState(
         targetValue = if (remainingSeconds <= 5) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         label = "progressColor"
