@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.biometric.BiometricPrompt
@@ -68,13 +67,14 @@ import com.yiran.cerberus.ui.home.SettingsScreen
 import com.yiran.cerberus.ui.theme.CerberusTheme
 import com.yiran.cerberus.util.SecurityUtil
 import kotlinx.coroutines.CancellationException
+import androidx.activity.compose.PredictiveBackHandler
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // 安全增强：禁止截屏和录屏，防止木马窃取 OTP 码或主密码
+        // 安全增强：禁止截屏和录屏
         window.setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
@@ -95,7 +95,6 @@ class MainActivity : FragmentActivity() {
                     var currentScreen by rememberSaveable { mutableStateOf("home") }
                     var isCheckingAuth by remember { mutableStateOf(true) }
 
-                    // 动画进度状态
                     var backProgress by remember { mutableFloatStateOf(0f) }
 
                     val triggerBiometric = {
@@ -104,6 +103,7 @@ class MainActivity : FragmentActivity() {
                                 isUnlocked = true 
                                 isCheckingAuth = false
                                 showPasswordInput = false
+                                SecurityUtil.markAuthenticated(context)
                             },
                             onCancel = { 
                                 showPasswordInput = true 
@@ -112,31 +112,41 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
+                    // 统一的身份验证检查逻辑
+                    val performAuthCheck = {
+                        if (!SecurityUtil.isTermsAccepted(context)) {
+                            showTerms = true
+                            isCheckingAuth = false
+                        } else if (!SecurityUtil.isMasterPasswordSet(context)) {
+                            showPasswordInput = true
+                            isCheckingAuth = false
+                        } else if (!isUnlocked || SecurityUtil.shouldReauthenticate(context)) {
+                            isUnlocked = false
+                            isCheckingAuth = true
+                            if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
+                                triggerBiometric()
+                            } else {
+                                showPasswordInput = true
+                                isCheckingAuth = false
+                            }
+                        } else {
+                            // 已解锁且未超时
+                            isCheckingAuth = false
+                        }
+                    }
+
                     // 监听应用全局生命周期
                     DisposableEffect(Unit) {
                         val observer = LifecycleEventObserver { _, event ->
                             when (event) {
                                 Lifecycle.Event.ON_START -> {
-                                    // 从后台返回时检查是否需要重新锁定
-                                    if (SecurityUtil.isTermsAccepted(context) && 
-                                        SecurityUtil.isMasterPasswordSet(context) &&
-                                        SecurityUtil.shouldReauthenticate(context)) {
-                                        isUnlocked = false
-                                        isCheckingAuth = true
-                                        if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
-                                            triggerBiometric()
-                                        } else {
-                                            showPasswordInput = true
-                                            isCheckingAuth = false
-                                        }
-                                    } else if (isUnlocked) {
-                                        // 还没到超时时间，保持解锁
-                                        isCheckingAuth = false
-                                    }
+                                    performAuthCheck()
                                 }
                                 Lifecycle.Event.ON_STOP -> {
-                                    // 进入后台时记录时间
-                                    SecurityUtil.markEnterBackground()
+                                    // 只有在已解锁状态下进入后台才记录时间
+                                    if (isUnlocked) {
+                                        SecurityUtil.markEnterBackground(context)
+                                    }
                                 }
                                 else -> {}
                             }
@@ -147,27 +157,7 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    // 初始检查
-                    LaunchedEffect(Unit) {
-                        if (!SecurityUtil.isTermsAccepted(context)) {
-                            showTerms = true
-                            isCheckingAuth = false
-                        } else if (!SecurityUtil.isMasterPasswordSet(context)) {
-                            showPasswordInput = true
-                            isCheckingAuth = false
-                        } else if (!isUnlocked) {
-                            if (SecurityUtil.isBiometricEnabled(context) && SecurityUtil.canUseBiometric(context)) {
-                                triggerBiometric()
-                            } else {
-                                showPasswordInput = true
-                                isCheckingAuth = false
-                            }
-                        } else {
-                            isCheckingAuth = false
-                        }
-                    }
-
-                    // 处理返回键：只有在已解锁且在设置页面时才拦截
+                    // 处理返回键
                     if (isUnlocked && currentScreen == "settings") {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                             PredictiveBackHandler { progress ->
@@ -209,12 +199,7 @@ class MainActivity : FragmentActivity() {
                                 TermsAndConditionsScreen(onAccepted = {
                                     SecurityUtil.setTermsAccepted(context)
                                     showTerms = false
-                                    if (!SecurityUtil.isMasterPasswordSet(context)) {
-                                        showPasswordInput = true
-                                    } else {
-                                        isCheckingAuth = true
-                                        triggerBiometric()
-                                    }
+                                    performAuthCheck()
                                 })
                             }
                             isCheckingAuth -> {
@@ -225,6 +210,7 @@ class MainActivity : FragmentActivity() {
                                     onUnlockSuccess = { 
                                         val isFirstTime = !SecurityUtil.isMasterPasswordSet(context)
                                         isUnlocked = true
+                                        SecurityUtil.markAuthenticated(context)
                                         if (isFirstTime && SecurityUtil.canUseBiometric(context)) {
                                             SecurityUtil.setBiometricEnabled(context, true)
                                         }
@@ -260,12 +246,10 @@ class MainActivity : FragmentActivity() {
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // 用户取消验证（如点击取消按钮或手势返回）
                     if (errorCode == BiometricPrompt.ERROR_USER_CANCELED || 
                         errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
                         onCancel()
                     } else {
-                        // 其他错误（如尝试次数过多）也退回到密码输入
                         onCancel()
                     }
                 }

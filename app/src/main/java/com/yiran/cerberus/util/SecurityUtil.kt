@@ -4,6 +4,7 @@ package com.yiran.cerberus.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.core.content.edit
@@ -24,8 +25,7 @@ object SecurityUtil {
     // 自动锁定阈值配置
     private const val KEY_AUTO_LOCK_TIME = "auto_lock_time"
     private const val DEFAULT_AUTO_LOCK_TIME = 30 * 1000L // 默认 30 秒
-    
-    private var lastBackgroundTime: Long = 0
+    private const val KEY_LAST_BACKGROUND_TIME = "last_background_time"
 
     init {
         loadNativeLibraries()
@@ -74,13 +74,26 @@ object SecurityUtil {
         )
     }
 
-    fun markEnterBackground() {
-        lastBackgroundTime = System.currentTimeMillis()
+    fun markEnterBackground(context: Context) {
+        // 使用 SystemClock.elapsedRealtime 防止用户通过修改系统时间绕过锁定
+        getEncryptedPrefs(context).edit {
+            putLong(KEY_LAST_BACKGROUND_TIME, SystemClock.elapsedRealtime())
+        }
+    }
+
+    fun markAuthenticated(context: Context) {
+        // 标记已成功验证，清除后台计时
+        getEncryptedPrefs(context).edit {
+            putLong(KEY_LAST_BACKGROUND_TIME, 0L)
+        }
     }
 
     fun shouldReauthenticate(context: Context): Boolean {
-        if (lastBackgroundTime == 0L) return true
-        val elapsed = System.currentTimeMillis() - lastBackgroundTime
+        val lastTime = getEncryptedPrefs(context).getLong(KEY_LAST_BACKGROUND_TIME, 0L)
+        // 如果 lastTime 为 0，表示应用处于活跃状态或刚解锁
+        if (lastTime == 0L) return false
+        
+        val elapsed = SystemClock.elapsedRealtime() - lastTime
         return elapsed > getAutoLockTime(context)
     }
 
