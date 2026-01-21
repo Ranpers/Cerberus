@@ -63,7 +63,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ProcessLifecycleOwner
 import com.yiran.cerberus.ui.home.HomeScreen
 import com.yiran.cerberus.ui.home.SettingsScreen
 import com.yiran.cerberus.ui.theme.CerberusTheme
@@ -133,23 +132,25 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    DisposableEffect(Unit) {
+                    DisposableEffect(activity) {
                         val observer = LifecycleEventObserver { _, event ->
                             when (event) {
                                 Lifecycle.Event.ON_START -> {
                                     performAuthCheck()
                                 }
                                 Lifecycle.Event.ON_STOP -> {
-                                    if (isUnlocked) {
+                                    // 只有在非配置更改（如旋转屏幕）导致的停止时，才标记进入后台
+                                    // 直接使用 activity.lifecycle 规避 ProcessLifecycleOwner 的 700ms 延迟，实现真正的“立即”锁定
+                                    if (isUnlocked && !activity.isChangingConfigurations) {
                                         SecurityUtil.markEnterBackground(context)
                                     }
                                 }
                                 else -> {}
                             }
                         }
-                        ProcessLifecycleOwner.get().lifecycle.addObserver(observer)
+                        activity.lifecycle.addObserver(observer)
                         onDispose {
-                            ProcessLifecycleOwner.get().lifecycle.removeObserver(observer)
+                            activity.lifecycle.removeObserver(observer)
                         }
                     }
 

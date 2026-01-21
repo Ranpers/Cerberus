@@ -76,13 +76,14 @@ object SecurityUtil {
     }
 
     fun markEnterBackground(context: Context) {
-        getEncryptedPrefs(context).edit {
+        // 使用 commit = true 确保在应用退出前立即写入时间，规避异步带来的状态延迟
+        getEncryptedPrefs(context).edit(commit = true) {
             putLong(KEY_LAST_BACKGROUND_TIME, SystemClock.elapsedRealtime())
         }
     }
 
     fun markAuthenticated(context: Context) {
-        getEncryptedPrefs(context).edit {
+        getEncryptedPrefs(context).edit(commit = true) {
             putLong(KEY_LAST_BACKGROUND_TIME, 0L)
         }
     }
@@ -92,7 +93,8 @@ object SecurityUtil {
         if (lastTime == 0L) return false
         
         val elapsed = SystemClock.elapsedRealtime() - lastTime
-        return elapsed > getAutoLockTime(context)
+        // 使用 >= 确保设置 0 秒（立即）时能立即触发重新验证
+        return elapsed >= getAutoLockTime(context)
     }
 
     fun getAutoLockTime(context: Context): Long {

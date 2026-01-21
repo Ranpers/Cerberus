@@ -293,6 +293,7 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                             icon = Icons.Default.Timer,
                             label = "自动锁定超时",
                             value = when(autoLockTime.longValue) {
+                                0L -> "立即"
                                 15000L -> "15 秒"
                                 30000L -> "30 秒"
                                 60000L -> "60 秒"
@@ -307,9 +308,9 @@ fun SettingsScreen(onBack: () -> Unit, homeViewModel: HomeViewModel = viewModel(
                             shape = RoundedCornerShape(16.dp),
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                         ) {
-                            listOf(15000L, 30000L, 60000L).forEach { time ->
+                            listOf(0L, 15000L, 30000L, 60000L).forEach { time ->
                                 DropdownMenuItem(
-                                    text = { Text("${time / 1000} 秒", fontWeight = FontWeight.Medium) },
+                                    text = { Text(if (time == 0L) "立即" else "${time / 1000} 秒", fontWeight = FontWeight.Medium) },
                                     onClick = {
                                         SecurityUtil.setAutoLockTime(context, time)
                                         autoLockTime.longValue = time
